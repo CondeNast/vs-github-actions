@@ -1,0 +1,42 @@
+name: serverless deploy to AWS
+on:
+  workflow_call:
+    inputs:
+      env:
+        required: true
+        type: string
+        description: environment to deploy to
+    secrets:
+      NPM_TOKEN:
+        required: true
+      AWS_ACCESS_KEY_ID:
+        required: true
+      AWS_SECRET_ACCESS_KEY:
+        required: true
+      ZEPHR_API_SECRET_KEY:
+        required: false
+      ZEPHR_API_ACCESS_KEY:
+        required: false
+      SAILTHRU_API_ACCESS_KEY:
+        required: false
+      SAILTHRU_API_SECRET_KEY:
+        required: false
+jobs:
+  deploy:
+    name: deploy serverless stack
+    runs-on: ubuntu-latest
+    environment: ${{inputs.env}}
+    steps:
+      - uses: actions/checkout@v2
+      - name: serverless deploy to ${{inputs.env}}
+        uses: serverless/github-action@v3
+        with:
+          args: -c "echo '//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}' > ~/.npmrc && yarn install --ignore-engines && sls config credentials --provider aws --key "$AWS_ACCESS_KEY_ID" --secret "$AWS_SECRET_ACCESS_KEY" --profile ${{inputs.env}} && sls deploy --stage ${{inputs.env}}"
+          entrypoint: /bin/sh
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          ZEPHR_API_SECRET_KEY: ${{ secrets.ZEPHR_API_SECRET_KEY }}
+          ZEPHR_API_ACCESS_KEY: ${{ secrets.ZEPHR_API_ACCESS_KEY }}
+          SAILTHRU_API_ACCESS_KEY: ${{ secrets.SAILTHRU_API_ACCESS_KEY }}
+          SAILTHRU_API_SECRET_KEY: ${{ secrets.SAILTHRU_API_SECRET_KEY }}
