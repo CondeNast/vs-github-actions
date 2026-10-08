@@ -6,12 +6,24 @@ on:
         required: true
         type: string
         description: environment from where resources needs to be removed
+      custom_env:
+        required: false
+        type: string
+        description: GitHub environment used for removal approvals and OIDC
+      account_id:
+        required: true
+        type: string
+        description: AWS account containing the Serverless stack
+      aws_region:
+        required: true
+        type: string
+        description: AWS region used by the Serverless stage
+      tenant_name:
+        required: true
+        type: string
+        description: AWS tenant used for the removal role
     secrets:
       NPM_TOKEN:
-        required: true
-      AWS_ACCESS_KEY_ID:
-        required: true
-      AWS_SECRET_ACCESS_KEY:
         required: true
       ZEPHR_API_SECRET_KEY:
         required: false
@@ -21,21 +33,39 @@ on:
         required: false
       SAILTHRU_API_SECRET_KEY:
         required: false
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   deploy:
     name: remove serverless stack
     runs-on: ubuntu-latest
-    environment: ${{inputs.env}}
+    environment: ${{ inputs.custom_env || inputs.env }}
     steps:
-      - uses: actions/checkout@v2
-      - name: remove serverless resource from ${{inputs.env}}
+      - uses: actions/checkout@v4
+      - name: Configure AWS credentials
+        uses: CondeNast/aws-credentials-action@v1
+        with:
+          account_id: ${{ inputs.account_id }}
+          read_only_role: false
+          aws_region: ${{ inputs.aws_region }}
+          tenant_name: ${{ inputs.tenant_name }}
+      - name: remove serverless resource from ${{ inputs.env }}
         uses: serverless/github-action@v3
         with:
-          args: -c "echo '//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}' > ~/.npmrc && yarn install --ignore-engines && sls config credentials --provider aws --key "$AWS_ACCESS_KEY_ID" --secret "$AWS_SECRET_ACCESS_KEY" --profile ${{inputs.env}} && sls remove --stage ${{inputs.env}}"
+          args: >-
+            -c 'set -eu;
+                umask 077;
+                mkdir -p "$HOME/.aws";
+                printf "[%s]\naws_access_key_id = %s\naws_secret_access_key = %s\naws_session_token = %s\n" "$DEPLOY_STAGE" "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" "$AWS_SESSION_TOKEN" > "$HOME/.aws/credentials";
+                printf "//registry.npmjs.org/:_authToken=%s\n" "$NPM_TOKEN" > "$HOME/.npmrc";
+                yarn install --ignore-engines;
+                sls remove --stage "$DEPLOY_STAGE"'
           entrypoint: /bin/sh
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          DEPLOY_STAGE: ${{ inputs.env }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           ZEPHR_API_SECRET_KEY: ${{ secrets.ZEPHR_API_SECRET_KEY }}
           ZEPHR_API_ACCESS_KEY: ${{ secrets.ZEPHR_API_ACCESS_KEY }}
           SAILTHRU_API_ACCESS_KEY: ${{ secrets.SAILTHRU_API_ACCESS_KEY }}
